@@ -6,6 +6,7 @@
 # This software is licensed as described in the file COPYING, which
 # you should have received as part of this distribution.
 
+import warnings
 import operator
 import sys
 import jsonpickle.util as util
@@ -75,19 +76,23 @@ class Unpickler(object):
             return self._pop(typeref)
 
         if has_tag(obj, tags.REPR):
-            return self._pop(loadrepr(obj[tags.REPR]))
+            instance = loadrepr(obj[tags.REPR])
+            self._mkref(instance)
+            return self._pop(instance)
 
         if has_tag(obj, tags.OBJECT):
-
             cls = loadclass(obj[tags.OBJECT])
             if not cls:
+                self._mkref(obj)
                 return self._pop(obj)
 
             # check custom handlers
             HandlerClass = handlers.registry.get(cls)
             if HandlerClass:
                 handler = HandlerClass(self)
-                return self._pop(handler.restore(obj))
+                instance = handler.restore(obj)
+                self._mkref(instance)
+                return self._pop(instance)
 
             try:
                 if hasattr(cls, '__new__'):
@@ -219,6 +224,8 @@ def loadclass(module_and_name):
         __import__(module)
         return getattr(sys.modules[module], name)
     except:
+        warn_msg = 'Could not import %s' % module_and_name
+        warnings.warn(warn_msg)
         return None
 
 def loadrepr(reprstr):
